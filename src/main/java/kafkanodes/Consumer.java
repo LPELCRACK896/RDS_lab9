@@ -4,8 +4,8 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
-import org.apache.kafka.common.TopicPartition;
 import org.json.JSONObject;
 
 import org.jfree.chart.ChartFactory;
@@ -18,16 +18,14 @@ import javax.swing.JFrame;
 import java.awt.BorderLayout;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Properties;
 
 
 
 public class Consumer extends Client {
 
-    private KafkaConsumer<String, String> consumer;
+    private KafkaConsumer<String, byte[]> consumer;
     private String topic;
     private TimeSeries temperatureSeries;
     private TimeSeries humiditySeries;
@@ -41,7 +39,7 @@ public class Consumer extends Client {
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, Constants.SERVER_NAME + ":" + Constants.PORT);
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "weather-data-consumer-group");
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
         consumer = new KafkaConsumer<>(props);
         consumer.subscribe(Collections.singletonList(topic));
@@ -74,55 +72,13 @@ public class Consumer extends Client {
 
     }
 
-    public void getLatestRecord() {
-        TopicPartition topicPartition = new TopicPartition(this.topic, 0);
-
-        // Manually assign the partition to the consumer
-        consumer.assign(Collections.singletonList(topicPartition));
-
-        // Make sure to poll once to get the partition assignment initialized
-        consumer.poll(Duration.ofMillis(0));
-
-        // Now it's safe to seek to the end
-        consumer.seekToEnd(Collections.singletonList(topicPartition));
-
-        // Since seekToEnd is lazy, we need to poll again to get the actual last offset
-        consumer.poll(Duration.ofMillis(0));
-
-        // Get the last offset of the partition
-        long lastOffset = consumer.position(topicPartition);
-
-        // If there is no record, lastOffset will be 0 and we don't need to seek
-        if (lastOffset > 0) {
-            consumer.seek(topicPartition, lastOffset - 1);
-        }
-
-        // Now we poll for the actual data
-        ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
-
-        // It's possible that there are no records if the last message was deleted due to retention policy
-        if (!records.isEmpty()) {
-            for (ConsumerRecord<String, String> record : records) {
-                System.out.printf("Consumed record with key %s and value %s\n", record.key(), record.value());
-                // Parse the JSON record as needed
-                JSONObject jsonObject = new JSONObject(record.value());
-                System.out.println("Temperatura: " + jsonObject.getDouble("temperatura"));
-                System.out.println("Humedad: " + jsonObject.getInt("humedad"));
-                System.out.println("Dirección del viento: " + jsonObject.getString("direccion_viento"));
-            }
-        } else {
-            System.out.println("No records found at the last offset.");
-        }
-
-        consumer.close();
-    }
-
     public void processMessages() {
         try {
             while (true) {
-                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
-                for (ConsumerRecord<String, String> record : records) {
-                    JSONObject jsonObject = new JSONObject(record.value());
+                ConsumerRecords<String, byte[]> records = consumer.poll(Duration.ofMillis(100));
+                for (ConsumerRecord<String, byte[]> record : records) {
+                    System.out.println(record.value());
+                    JSONObject jsonObject = decode(record.value());
                     double temperature = jsonObject.getDouble("temperatura");
                     int humidity = jsonObject.getInt("humedad");
 
@@ -138,5 +94,20 @@ public class Consumer extends Client {
             consumer.close();
         }
     }
+
+    // Decodifica 3 bytes en un objeto JSON
+    public static JSONObject decode(byte[] data) {
+        int packedData = ((data[0] & 0xFF) << 16) | ((data[1] & 0xFF) << 8) | (data[2] & 0xFF);
+        double temperatura = ((packedData >> 10) & 0x3FFF) / 1000.0;
+        int humedad = (packedData >> 3) & 0x7F;
+        String direccionViento = Constants.DIRECTIONS[packedData & 0x07];
+
+        JSONObject json = new JSONObject();
+        json.put("temperatura", temperatura);
+        json.put("humedad", humedad);
+        json.put("direccion_viento", direccionViento);
+        return json;
+    }
+
 }
 

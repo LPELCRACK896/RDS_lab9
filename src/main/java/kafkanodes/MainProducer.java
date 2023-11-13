@@ -1,5 +1,7 @@
 package kafkanodes;
 
+import org.json.JSONObject;
+
 import java.io.IOException;
 import java.util.Scanner;
 import java.util.concurrent.ThreadLocalRandom;
@@ -10,8 +12,11 @@ public class MainProducer {
             boolean run = true;
             while (run) {
                 String data = pd.generateWeatherData();
-                pd.sendInfo(data);
+                JSONObject jsonObject = new JSONObject(data);
                 System.out.println(data);
+                byte[] encodedData = pd.encode(jsonObject);
+                System.out.println(encodedData);
+                pd.sendInfo(encodedData);
                 int sleepTime = ThreadLocalRandom.current().nextInt(15, 31);
                 Thread.sleep(sleepTime * 1000L);
 

@@ -1,5 +1,7 @@
 package kafkanodes;
 
+import org.json.JSONObject;
+
 import java.util.concurrent.ThreadLocalRandom;
 
 public class Producer extends Client {
@@ -25,9 +27,8 @@ public class Producer extends Client {
     }
 
     public String generateWindDirection() {
-        String[] directions = {"N", "NW", "W", "SW", "S", "SE", "E", "NE"};
-        int index = ThreadLocalRandom.current().nextInt(directions.length);
-        return directions[index];
+        int index = ThreadLocalRandom.current().nextInt(Constants.DIRECTIONS.length);
+        return Constants.DIRECTIONS[index];
     }
 
     public String generateWeatherData() {
@@ -35,4 +36,20 @@ public class Producer extends Client {
         int humidity = generateHumidity();
         String windDirection = generateWindDirection();
         return String.format("{\"temperatura\":%s, \"humedad\":%d, \"direccion_viento\":\"%s\"}", temperature, humidity, windDirection);
-    }}
+    }
+
+    // Codifica un objeto JSON en 3 bytes
+    public static byte[] encode(JSONObject json) {
+        int temperature = (int) (json.getDouble("temperatura") * 1000);
+        int humidity = json.getInt("humedad");
+        int windDirection = java.util.Arrays.asList(Constants.DIRECTIONS).indexOf(json.getString("direccion_viento"));
+
+        int packedData = temperature << 10 | humidity << 3 | windDirection;
+        byte[] encoded = new byte[3];
+        encoded[0] = (byte) (packedData >> 16);
+        encoded[1] = (byte) (packedData >> 8);
+        encoded[2] = (byte) packedData;
+        return encoded;
+    }
+
+}
