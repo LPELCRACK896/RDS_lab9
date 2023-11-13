@@ -1,5 +1,5 @@
 ﻿﻿# Universidad del Valle de Guatemala
-# Física 3 - SECCIÓN - 30 - 2023 - 2
+# Redes - SECCIÓN - 10 - 2023 - 2
 ## Autores:
 - #### Axel López - 20768
 - #### Luis González - 20008
